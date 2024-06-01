@@ -1,0 +1,288 @@
+getwd()
+setwd("/Users/karenwang/Documents/Mirror of Identity")
+
+library("dplyr")
+library("car")
+library("stargazer")
+library("corrplot")
+library("backports")     # to revive the isFALSE() function for sim_slopes()
+library("effects")       # for probing interactions
+library("ggplot2")       # for data visualization
+library("interactions")  # for probing/plotting interactions
+library("lme4")          # for multilevel models
+library("lmerTest")      # for p-values
+library("psych")         # for describing the data
+library("plyr")          # for data manipulation
+library("Hmisc")
+library("lavaan")
+library("semPlot")
+library("tidyverse")
+library("optimx")
+
+# Import and fill NAs
+data <- read.csv("EMA_Daten_Final.csv", header=TRUE)
+data[data==888] <- NA
+
+# Reverse code SA1 and RA1
+data$SA_1 <- 6-data$SA_1
+data$RA_1 <- 6-data$RA_1
+
+# Simplify German Column Names
+names(data)[names(data) == "Soziale_Interaktion"] <- "Social_Intrct"
+names(data)[names(data) == "Soziale_Interaktion_Angenehm"] <- "Social_Intrct_Plst"
+names(data)[names(data) == "Befragung"] <- "Prompt_Num"
+
+# Compute simple latent variables
+data$Intpsn_Stress = rowMeans(data[,c("Interpersonaler_Stress_1","Interpersonaler_Stress_2")])
+data$Stress = rowMeans(data[,c("Stress_1","Stress_2")])
+data$Arousal = rowMeans(data[,c("Arousal_1","Arousal_2")])
+data$Positive_Affect = rowMeans(data[,c("PA_1","PA_2")])
+data$Negative_Affect = rowMeans(data[,c("NA_1","NA_2")])
+data$PB = rowMeans(data[,c("PB_1","PB_2")])
+data$TB = rowMeans(data[,c("TB_1","TB_2")])
+data$SA = rowMeans(data[,c("SA_1","SA_2")])
+data$RA = rowMeans(data[,c("RA_1","RA_2")])
+
+# Check basic stats of simple latent variables
+vars <- c("Social_Intrct",
+          "Social_Intrct_Plst",
+          "Intpsn_Stress",
+          "Stress",
+          "Arousal",
+          "Positive_Affect",
+          "Negative_Affect",
+          "PB",
+          "TB",
+          "SA",
+          "RA")
+describe(data[,vars])
+
+# Correlation Matrix
+rcorr_result <- rcorr(as.matrix(na.omit(data[, vars])), type="spearman")
+rcorr_matrix <- rcorr_result$r
+corrplot(rcorr_matrix, 
+         method = "color", 
+         type = "lower", 
+         order = "original",
+         tl.col = "black", # Text label color
+         tl.srt = 360, # Text label rotation
+         diag = FALSE) # Exclude the diagonal
+
+# Aggregate entries to person level
+vars2 = c("ID",vars)
+data_person <- aggregate(. ~ ID, data = data[,vars2], FUN = mean)
+
+# Correlation matrix of all entries
+pairs.panels(data[,vars], main="Correlation Matrix of All Entries")
+# Correlation matrix of person means
+pairs.panels(data_person[,vars], main="Correlation Matrix of Person Means")
+
+# Exploratory Factor Analysis - to see if it makes sense to group external/internal factors
+vars3 = vars[! vars %in% c("Social_Intrct")]
+fa_result <- fa(data[,vars3], nfactors = 3, rotate = "varimax",fm="ml")
+print(fa_result,digits=2, cutoff=0.4, sort=TRUE)
+loads <- fa_result$loadings
+fa.diagram(loads)
+
+# Adding n-1 to dataset
+data <- data %>% 
+  group_by(ID) %>% 
+  mutate(SA_lag = lag(SA),
+         RA_lag = lag(RA),
+         PB_lag = lag(PB),
+         TB_lag = lag(TB),
+         Social_Intrct_lag = lag(Social_Intrct),
+         Social_Intrct_Plst_lag = lag(Social_Intrct_Plst),
+         Intpsn_Stress_lag = lag(Intpsn_Stress),
+         Stress_lag = lag(Stress),
+         Arousal_lag = lag(Arousal),
+         Positive_Affect_lag = lag(Positive_Affect),
+         Negative_Affect_lag = lag(Negative_Affect))
+
+# Add label of first daily prompts
+data <- data %>%
+  mutate(
+    First_Prompt_of_Day = ifelse(Beep == 1, 1, 0)) 
+
+# Appending person means to data
+data <- merge(data,data_person,by="ID",suffix = c("", "_mean"))
+
+# Center the variables around person means
+data$SA_mean_c <- scale(data$SA_mean,center=TRUE,scale=FALSE)
+data$RA_mean_c <- scale(data$RA_mean,center=TRUE,scale=FALSE)
+data$PB_mean_c <- scale(data$PB_mean,center=TRUE,scale=FALSE)
+data$TB_mean_c <- scale(data$TB_mean,center=TRUE,scale=FALSE)
+data$Social_Intrct_mean_c <- scale(data$Social_Intrct_mean,center=TRUE,scale=FALSE)
+data$Social_Intrct_Plst_mean_c <- scale(data$Social_Intrct_Plst_mean,center=TRUE,scale=FALSE)
+data$Intpsn_Stress_mean_c <- scale(data$Intpsn_Stress_mean,center=TRUE,scale=FALSE)
+data$Stress_mean_c <- scale(data$Stress_mean,center=TRUE,scale=FALSE)
+data$Arousal_mean_c <- scale(data$Arousal_mean,center=TRUE,scale=FALSE)
+data$Positive_Affect_mean_c <- scale(data$Positive_Affect_mean,center=TRUE,scale=FALSE)
+data$Negative_Affect_mean_c <- scale(data$Negative_Affect_mean,center=TRUE,scale=FALSE)
+
+data$SA_c <- data$SA - data$SA_mean
+data$RA_c <- data$RA - data$RA_mean
+data$PB_c <- data$PB - data$PB_mean
+data$TB_c <- data$TB - data$TB_mean
+data$Social_Intrct_c <- data$Social_Intrct - data$Social_Intrct_mean
+data$Social_Intrct_Plst_c <- data$Social_Intrct_Plst - data$Social_Intrct_Plst_mean
+data$Intpsn_Stress_c <- data$Intpsn_Stress - data$Intpsn_Stress_mean
+data$Stress_c <- data$Stress - data$Stress_mean
+data$Arousal_c <- data$Arousal - data$Arousal_mean
+data$Positive_Affect_c <- data$Positive_Affect - data$Positive_Affect_mean
+data$Negative_Affect_c <- data$Negative_Affect - data$Negative_Affect_mean
+
+data$SA_lag_c <- data$SA_lag - data$SA_mean
+data$RA_lag_c <- data$RA_lag - data$RA_mean
+data$PB_lag_c <- data$PB_lag - data$PB_mean
+data$TB_lag_c <- data$TB_lag - data$TB_mean
+data$Social_Intrct_lag_c <- data$Social_Intrct_lag - data$Social_Intrct_mean
+data$Social_Intrct_Plst_lag_c <- data$Social_Intrct_Plst_lag - data$Social_Intrct_Plst_mean
+data$Intpsn_Stress_lag_c <- data$Intpsn_Stress_lag - data$Intpsn_Stress_mean
+data$Stress_lag_c <- data$Stress_lag - data$Stress_mean
+data$Arousal_lag_c <- data$Arousal_lag - data$Arousal_mean
+data$Positive_Affect_lag_c <- data$Positive_Affect_lag - data$Positive_Affect_mean
+data$Negative_Affect_lag_c <- data$Negative_Affect_lag - data$Negative_Affect_mean
+
+
+### Multilevel Model - H1
+
+# Unconditional Model - H1
+m0_pb <- lmer(formula = PB ~ 1 + (1|ID), 
+              data=data,
+              na.action=na.exclude)
+summary(m0_pb)
+rf_pb <- as.data.frame(VarCorr(m0_pb))
+rf_pb
+icc_rf_pb <- rf_pb[1,4]/(rf_pb[1,4]+rf_pb[2,4]) 
+icc_rf_pb # 60% attributed to between person effect
+
+m0_tb <- lmer(formula = TB ~ 1 + (1|ID), 
+              data=data,
+              na.action=na.exclude)
+summary(m0_tb)
+rf_tb <- as.data.frame(VarCorr(m0_tb))
+rf_tb
+icc_rf_tb <- rf_tb[1,4]/(rf_tb[1,4]+rf_tb[2,4]) 
+icc_rf_tb # 58% attributed to between person effect
+
+# Cross-sectional - H1
+# PB models
+m1_pb_ri <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                SA_mean_c * SA_c + 
+                RA_mean_c * RA_c + 
+                (1 | ID), 
+              data=data,
+              na.action=na.exclude)
+
+m1_pb_rs <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                  SA_mean_c * SA_c + 
+                  RA_mean_c * RA_c + 
+                  (0 + SA_c + RA_c | ID), 
+                data=data,
+                na.action=na.exclude)
+
+m1_pb_ris <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                  SA_mean_c * SA_c + 
+                  RA_mean_c * RA_c + 
+                  (1 + SA_c + RA_c | ID), 
+                data=data,
+                na.action=na.exclude)
+
+# PB model comparison
+anova(m1_pb_ri,m1_pb_rs,m1_pb_ris)
+summary(m1_pb_ris) # random slope + intercept wins
+
+# TB models
+m1_tb_ri <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                   SA_mean_c * SA_c + 
+                   RA_mean_c * RA_c + 
+                   (1 | ID), 
+                 data=data,
+                 na.action=na.exclude)
+
+m1_tb_rs <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                   SA_mean_c * SA_c + 
+                   RA_mean_c * RA_c + 
+                   (0 + SA_c + RA_c | ID), 
+                 data=data,
+                 na.action=na.exclude)
+
+m1_tb_ris <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                    SA_mean_c * SA_c + 
+                    RA_mean_c * RA_c + 
+                    (1 + SA_c + RA_c | ID), 
+                  data=data,
+                  na.action=na.exclude)
+
+# TB model comparison
+anova(m1_tb_ri,m1_tb_rs,m1_tb_ris)
+summary(m1_tb_ris) # random slope + intercept wins
+
+# Longitudinal - H1
+# PB Models
+m1_pb_lag_ri <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                    SA_mean_c * SA_lag_c + 
+                    RA_mean_c * RA_lag_c + 
+                    (1 | ID) + 
+                    PB_lag_c, 
+                  data=data,
+                  na.action=na.exclude)
+m1_pb_lag_rs <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                       SA_mean_c * SA_lag_c + 
+                       RA_mean_c * RA_lag_c + 
+                       (0 + SA_lag_c + RA_lag_c | ID) + 
+                       PB_lag_c, 
+                     data=data,
+                     na.action=na.exclude)
+m1_pb_lag_ris <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                       SA_mean_c * SA_lag_c + 
+                       RA_mean_c * RA_lag_c + 
+                       (1 + SA_lag_c + RA_lag_c | ID) + 
+                       PB_lag_c, 
+                     data=data,
+                     na.action=na.exclude)
+m1_pb_lag_risa <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                    SA_mean_c * SA_lag_c + 
+                    RA_mean_c * RA_lag_c + 
+                    (1 + SA_lag_c + RA_lag_c + PB_lag_c | ID) + 
+                    PB_lag_c, 
+                  data=data,
+                  na.action=na.exclude)
+
+# PB Model Selection
+anova(m1_pb_lag_ri, m1_pb_lag_rs, m1_pb_lag_ris, m1_pb_lag_risa)
+summary(m1_pb_lag_risa)
+
+# TB Models
+m1_tb_lag_ri <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                       SA_mean_c * SA_lag_c + 
+                       RA_mean_c * RA_lag_c + 
+                       (1 | ID) + 
+                       TB_lag_c, 
+                     data=data,
+                     na.action=na.exclude)
+m1_tb_lag_rs <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                       SA_mean_c * SA_lag_c + 
+                       RA_mean_c * RA_lag_c + 
+                       (0 + SA_lag_c + RA_lag_c | ID) + 
+                       TB_lag_c, 
+                     data=data,
+                     na.action=na.exclude)
+m1_tb_lag_ris <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                        SA_mean_c * SA_lag_c + 
+                        RA_mean_c * RA_lag_c + 
+                        (1 + SA_lag_c + RA_lag_c | ID) + 
+                        TB_lag_c, 
+                      data=data,
+                      na.action=na.exclude)
+m1_tb_lag_risa <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
+                         SA_mean_c * SA_lag_c + 
+                         RA_mean_c * RA_lag_c + 
+                         (1 + SA_lag_c + RA_lag_c + TB_lag_c | ID) + 
+                         TB_lag_c, 
+                       data=data,
+                       na.action=na.exclude)
+
+anova(m1_tb_lag_ri, m1_tb_lag_rs, m1_tb_lag_ris, m1_tb_lag_risa)
+summary(m1_tb_lag_risa)
