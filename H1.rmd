@@ -250,7 +250,7 @@ m1_pb_lag_risa <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
                   data=data,
                   na.action=na.exclude)
 
-# PB Model Selection
+# PB model comparison
 anova(m1_pb_lag_ri, m1_pb_lag_rs, m1_pb_lag_ris, m1_pb_lag_risa)
 summary(m1_pb_lag_risa)
 
@@ -284,5 +284,6 @@ m1_tb_lag_risa <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
                        data=data,
                        na.action=na.exclude)
 
+# TB model comparison
 anova(m1_tb_lag_ri, m1_tb_lag_rs, m1_tb_lag_ris, m1_tb_lag_risa)
 summary(m1_tb_lag_risa)
