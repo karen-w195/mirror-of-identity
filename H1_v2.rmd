@@ -117,6 +117,19 @@ data_h1 <- data_h1 %>%
 # Appending person means to data
 data_h1 <- merge(data_h1,data_person,by="ID",suffix = c("", "_mean"))
 
+data_h1 %>%
+  group_by(floor(SA_mean)) %>%
+  dplyr::summarise(c=n(),pct=n_distinct(ID)/86,na.rm=TRUE)
+data_h1 %>%
+  group_by(floor(RA_mean)) %>%
+  dplyr::summarise(c=n(),pct=n_distinct(ID)/86,na.rm=TRUE)
+data_h1 %>%
+  group_by(ceil(PB_mean)) %>%
+  dplyr::summarise(c=n(),pct=n_distinct(ID)/86,na.rm=TRUE)
+data_h1 %>%
+  group_by(ceil(TB_mean)) %>%
+  dplyr::summarise(c=n(),pct=n_distinct(ID)/86,na.rm=TRUE)
+
 # Center the variables around person means
 data_h1$SA_mean_c <- scale(data_h1$SA_mean,center=TRUE,scale=FALSE)
 data_h1$RA_mean_c <- scale(data_h1$RA_mean,center=TRUE,scale=FALSE)
@@ -132,6 +145,27 @@ data_h1$SA_lag_c <- data_h1$SA_lag - data_h1$SA_mean
 data_h1$RA_lag_c <- data_h1$RA_lag - data_h1$RA_mean
 data_h1$PB_lag_c <- data_h1$PB_lag - data_h1$PB_mean
 data_h1$TB_lag_c <- data_h1$TB_lag - data_h1$TB_mean
+
+# MODEL 0
+## SA
+m0_sa <- lmer(formula = SA ~ 1 + (1|ID), 
+              data=data_h1,
+              na.action=na.exclude)
+summary(m0_sa)
+rf_sa <- as.data.frame(VarCorr(m0_sa))
+rf_sa
+icc_rf_sa <- rf_sa[1,4]/(rf_sa[1,4]+rf_sa[2,4]) 
+icc_rf_sa #69%
+
+## RA
+m0_ra <- lmer(formula = RA ~ 1 + (1|ID), 
+              data=data_h1,
+              na.action=na.exclude)
+summary(m0_ra)
+rf_ra <- as.data.frame(VarCorr(m0_ra))
+rf_ra
+icc_rf_ra <- rf_ra[1,4]/(rf_ra[1,4]+rf_ra[2,4]) 
+icc_rf_ra #66%
 
 # MODEL 1: SA/RA/TB ->PB
 ## MODEL NULL - ICC
@@ -183,91 +217,7 @@ m1_pb_ris_ml <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
 quasi_r2 <- 1-(var(residuals(m1_pb_ris_ml),na.rm=TRUE)/var(residuals(m0_pb_ml),na.rm=TRUE)) 
 quasi_r2 #50%
 
-## MODEL 1b: SA+RA+TB+PB(n-1)+TB(n-1)->PB
-
-### Random intercept vs. random slope
-m2_pb_ri <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                   SA_mean_c * SA_c + 
-                   RA_mean_c * RA_c + 
-                   TB_mean_c * TB_c +
-                   PB_lag_c + 
-                   TB_lag_c + 
-                   (1 | ID), 
-                 data=data_h1,
-                 na.action=na.exclude)
-
-m2_pb_ris <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                    SA_mean_c * SA_c + 
-                    RA_mean_c * RA_c + 
-                    TB_mean_c * TB_c +
-                    PB_lag_c + 
-                    TB_lag_c + 
-                    (1 + SA_c + RA_c + TB_c + PB_lag_c + TB_lag_c | ID), 
-                  data=data_h1,
-                  na.action=na.exclude)
-
-anova(m2_pb_ri,m2_pb_ris)
-summary(m2_pb_ris)
-
-### Quasi-R2; REML should be switched to ML
-m0_pb_ml <- lmer(formula = PB ~ 1 + (1|ID), 
-                 data=data_h1,
-                 REML=FALSE,
-                 na.action=na.exclude)
-m2_pb_ris_ml <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                       SA_mean_c * SA_c + 
-                       RA_mean_c * RA_c + 
-                       TB_mean_c * TB_c +
-                       PB_lag_c + 
-                       TB_lag_c + 
-                       (1 + SA_c + RA_c + TB_c + PB_lag_c + TB_lag_c | ID), 
-                     data=data_h1,
-                     REML=FALSE,
-                     na.action=na.exclude)
-
-quasi_r2 <- 1-(var(residuals(m2_pb_ris_ml),na.rm=TRUE)/var(residuals(m0_pb_ml),na.rm=TRUE)) 
-quasi_r2 #55%
-
-## MODEL 1c: SA(n-1)+RA(n-1)+TB(n-1)->PB
-
-### Random intercept vs. random slope
-m3_pb_ri <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                   SA_mean_c * SA_lag_c + 
-                   RA_mean_c * RA_lag_c + 
-                   TB_mean_c * TB_lag_c + 
-                   (1 | ID), 
-                 data=data_h1,
-                 na.action=na.exclude)
-
-m3_pb_ris <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                    SA_mean_c * SA_lag_c + 
-                    RA_mean_c * RA_lag_c + 
-                    TB_mean_c * TB_lag_c + 
-                    (1 + SA_lag_c + RA_lag_c + TB_lag_c | ID), 
-                  data=data_h1,
-                  na.action=na.exclude)
-
-anova(m3_pb_ri,m3_pb_ris)
-summary(m3_pb_ris)
-
-### Quasi-R2; REML should be switched to ML
-m0_pb_ml <- lmer(formula = PB ~ 1 + (1|ID), 
-                 data=data_h1,
-                 REML=FALSE,
-                 na.action=na.exclude)
-m3_pb_ris_ml <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                       SA_mean_c * SA_lag_c + 
-                       RA_mean_c * RA_lag_c + 
-                       TB_mean_c * TB_lag_c + 
-                       (1 + SA_lag_c + RA_lag_c + TB_lag_c | ID), 
-                     data=data_h1,
-                     REML=FALSE,
-                     na.action=na.exclude)
-
-quasi_r2 <- 1-(var(residuals(m3_pb_ris_ml),na.rm=TRUE)/var(residuals(m0_pb_ml),na.rm=TRUE)) 
-quasi_r2 #15%
-
-## MODEL 1d: SA(n-1)+RA(n-1)+PB(n-1)+TB(n-1)->PB
+## MODEL 1b: SA(n-1)+RA(n-1)+PB(n-1)+TB(n-1)->PB
 
 ### Random intercept vs. random slope
 m4_pb_ri <- lmer(formula = PB ~ 1 + Prompt_Num + First_Prompt_of_Day +
@@ -360,91 +310,8 @@ m1_tb_ris_ml <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
 quasi_r2 <- 1-(var(residuals(m1_tb_ris_ml),na.rm=TRUE)/var(residuals(m0_tb_ml),na.rm=TRUE)) 
 quasi_r2 #47%
 
-## MODEL 2b: SA+RA+PB+PB(n-1)+TB(n-1)->TB
 
-### Random intercept vs. random slope
-m2_tb_ri <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                   SA_mean_c * SA_c + 
-                   RA_mean_c * RA_c + 
-                   PB_mean_c * PB_c +
-                   PB_lag_c + 
-                   TB_lag_c + 
-                   (1 | ID), 
-                 data=data_h1,
-                 na.action=na.exclude)
-
-m2_tb_ris <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                    SA_mean_c * SA_c + 
-                    RA_mean_c * RA_c + 
-                    PB_mean_c * PB_c +
-                    PB_lag_c + 
-                    TB_lag_c + 
-                    (1 + SA_c + RA_c + PB_c + PB_lag_c + TB_lag_c | ID), 
-                  data=data_h1,
-                  na.action=na.exclude)
-
-anova(m2_tb_ri,m2_tb_ris)
-summary(m2_tb_ris)
-
-### Quasi-R2; REML should be switched to ML
-m0_tb_ml <- lmer(formula = TB ~ 1 + (1|ID), 
-                 data=data_h1,
-                 REML=FALSE,
-                 na.action=na.exclude)
-m2_tb_ris_ml <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                       SA_mean_c * SA_c + 
-                       RA_mean_c * RA_c + 
-                       PB_mean_c * PB_c +
-                       PB_lag_c + 
-                       TB_lag_c + 
-                       (1 + SA_c + RA_c + PB_c + PB_lag_c + TB_lag_c | ID), 
-                     data=data_h1,
-                     REML=FALSE,
-                     na.action=na.exclude)
-
-quasi_r2 <- 1-(var(residuals(m2_tb_ris_ml),na.rm=TRUE)/var(residuals(m0_tb_ml),na.rm=TRUE)) 
-quasi_r2 #51%
-
-## MODEL 2c: SA(n-1)+RA(n-1)+PB(n-1)->TB
-
-### Random intercept vs. random slope
-m3_tb_ri <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                   SA_mean_c * SA_lag_c + 
-                   RA_mean_c * RA_lag_c + 
-                   PB_mean_c * PB_lag_c + 
-                   (1 | ID), 
-                 data=data_h1,
-                 na.action=na.exclude)
-
-m3_tb_ris <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                    SA_mean_c * SA_lag_c + 
-                    RA_mean_c * RA_lag_c + 
-                    PB_mean_c * PB_lag_c + 
-                    (1 + SA_lag_c + RA_lag_c + PB_lag_c | ID), 
-                  data=data_h1,
-                  na.action=na.exclude)
-
-anova(m3_tb_ri,m3_tb_ris)
-summary(m3_tb_ris)
-
-### Quasi-R2; REML should be switched to ML
-m0_tb_ml <- lmer(formula = TB ~ 1 + (1|ID), 
-                 data=data_h1,
-                 REML=FALSE,
-                 na.action=na.exclude)
-m3_tb_ris_ml <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
-                       SA_mean_c * SA_lag_c + 
-                       RA_mean_c * RA_lag_c + 
-                       PB_mean_c * PB_lag_c + 
-                       (1 + SA_lag_c + RA_lag_c + PB_lag_c | ID), 
-                     data=data_h1,
-                     REML=FALSE,
-                     na.action=na.exclude)
-
-quasi_r2 <- 1-(var(residuals(m3_tb_ris_ml),na.rm=TRUE)/var(residuals(m0_tb_ml),na.rm=TRUE)) 
-quasi_r2 #14%
-
-## MODEL 1d: SA(n-1)+RA(n-1)+PB(n-1)+TB(n-1)->TB
+## MODEL 2b: SA(n-1)+RA(n-1)+PB(n-1)+TB(n-1)->TB
 
 ### Random intercept vs. random slope
 m4_tb_ri <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
@@ -463,6 +330,7 @@ m4_tb_ris <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
                     TB_lag_c + 
                     (1 + SA_lag_c + RA_lag_c + PB_lag_c + TB_lag_c | ID), 
                   data=data_h1,
+                  control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')),
                   na.action=na.exclude)
 
 anova(m4_tb_ri,m4_tb_ris)
@@ -481,7 +349,8 @@ m4_tb_ris_ml <- lmer(formula = TB ~ 1 + Prompt_Num + First_Prompt_of_Day +
                        (1 + SA_lag_c + RA_lag_c + PB_lag_c + TB_lag_c | ID), 
                      data=data_h1,
                      REML=FALSE,
+                     control = lmerControl(optimizer ='optimx', optCtrl=list(method='nlminb')),
                      na.action=na.exclude)
 
 quasi_r2 <- 1-(var(residuals(m4_tb_ris_ml),na.rm=TRUE)/var(residuals(m0_tb_ml),na.rm=TRUE)) 
-quasi_r2 #15%
+quasi_r2 #16%
