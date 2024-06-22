@@ -119,16 +119,16 @@ data_h1 <- merge(data_h1,data_person,by="ID",suffix = c("", "_mean"))
 
 data_h1 %>%
   group_by(floor(SA_mean)) %>%
-  dplyr::summarise(c=n(),pct=n_distinct(ID)/86,na.rm=TRUE)
+  dplyr::summarise(c=n_distinct(ID),pct=n_distinct(ID)/86,na.rm=TRUE)
 data_h1 %>%
   group_by(floor(RA_mean)) %>%
-  dplyr::summarise(c=n(),pct=n_distinct(ID)/86,na.rm=TRUE)
+  dplyr::summarise(c=n_distinct(ID),pct=n_distinct(ID)/86,na.rm=TRUE)
 data_h1 %>%
   group_by(ceil(PB_mean)) %>%
-  dplyr::summarise(c=n(),pct=n_distinct(ID)/86,na.rm=TRUE)
+  dplyr::summarise(c=n_distinct(ID),pct=n_distinct(ID)/86,na.rm=TRUE)
 data_h1 %>%
   group_by(ceil(TB_mean)) %>%
-  dplyr::summarise(c=n(),pct=n_distinct(ID)/86,na.rm=TRUE)
+  dplyr::summarise(c=n_distinct(ID),pct=n_distinct(ID)/86,na.rm=TRUE)
 
 # Center the variables around person means
 data_h1$SA_mean_c <- scale(data_h1$SA_mean,center=TRUE,scale=FALSE)
@@ -167,8 +167,7 @@ rf_ra
 icc_rf_ra <- rf_ra[1,4]/(rf_ra[1,4]+rf_ra[2,4]) 
 icc_rf_ra #66%
 
-# MODEL 1: SA/RA/TB ->PB
-## MODEL NULL - ICC
+## PB
 m0_pb <- lmer(formula = PB ~ 1 + (1|ID), 
               data=data_h1,
               na.action=na.exclude)
@@ -177,6 +176,18 @@ rf_pb <- as.data.frame(VarCorr(m0_pb))
 rf_pb
 icc_rf_pb <- rf_pb[1,4]/(rf_pb[1,4]+rf_pb[2,4]) 
 icc_rf_pb # 60% attributed to between person effect
+
+## TB
+m_tb_0 <- lmer(formula = TB ~ 1 + (1|ID), 
+               data=data_h1,
+               na.action=na.exclude)
+summary(m_tb_0)
+rf_tb <- as.data.frame(VarCorr(m_tb_0))
+rf_tb
+icc_rf_tb <- rf_tb[1,4]/(rf_tb[1,4]+rf_tb[2,4]) 
+icc_rf_tb # 58% attributed to between person effect
+
+# MODEL 1: SA/RA/TB ->PB
 
 ## MODEL 1a: SA+RA+TB->PB
 
@@ -261,15 +272,6 @@ quasi_r2 #19%
 
 
 # MODEL 2: SA/RA/PB ->TB
-## MODEL NULL 
-m_tb_0 <- lmer(formula = TB ~ 1 + (1|ID), 
-               data=data_h1,
-               na.action=na.exclude)
-summary(m_tb_0)
-rf_tb <- as.data.frame(VarCorr(m_tb_0))
-rf_tb
-icc_rf_tb <- rf_tb[1,4]/(rf_tb[1,4]+rf_tb[2,4]) 
-icc_rf_tb # 58% attributed to between person effect
 
 ## MODEL 2a: SA+RA+PB->TB
 
