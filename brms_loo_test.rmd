@@ -1,0 +1,108 @@
+# Install macrtools
+install.packages("remotes")
+remotes::install_github("coatless-mac/macrtools")
+macrtools::macos_rtools_install()
+macrtools::recipes_binary_install('r-base-dev')
+
+# Configuring C Toolchain for Mac
+dotR <- file.path(Sys.getenv("HOME"), ".R")
+if (!file.exists(dotR)) dir.create(dotR)
+M <- file.path(dotR, "Makevars")
+if (!file.exists(M)) file.create(M)
+arch <- ifelse(R.version$arch == "aarch64", "arm64", "x86_64")
+cat(paste("\nCXX17FLAGS += -O3 -mtune=native -arch", arch, "-ftemplate-depth-256"),
+    file = M, sep = "\n", append = FALSE)
+
+# To install the latest development version of RStan 
+remove.packages("rstan")
+if (file.exists(".RData")) file.remove(".RData")
+
+Sys.setenv(MAKEFLAGS = "-j4") # four cores used
+install.packages(c("Rcpp", "RcppEigen", "RcppParallel", "StanHeaders"), type = "source")
+install.packages("rstan", type = "source")
+example(stan_model, package = "rstan", run.dontrun = TRUE) # verify installation
+
+# Use Stan
+library("rstan") # observe startup messages
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE) # needs to run each time when loading the rstan library 
+
+# Use BRMS
+install.packages("brms")
+library("brms")
+
+# Repeat data set creation in H1_v2 script
+# (...)
+
+# MODEL 1a: SA/RA/TB ->PB
+m1_pb_ri <- brm(PB ~ 1 +
+                   SA_mean_c * SA_c + 
+                   RA_mean_c * RA_c + 
+                   TB_mean_c * TB_c + 
+                   (1 | ID), 
+                 data=data_h1)
+
+m1_pb_ris <- brm(PB ~ 1 +
+                    SA_mean_c * SA_c + 
+                    RA_mean_c * RA_c + 
+                    TB_mean_c * TB_c + 
+                    (1 + SA_c + RA_c + TB_c | ID), 
+                  data=data_h1)
+
+loo(m1_pb_ri, m1_pb_ris)
+
+## MODEL 1b: SA(n-1)+RA(n-1)+PB(n-1)+TB(n-1)->PB
+m4_pb_ri <- brm(PB ~ 1 + 
+                   SA_mean_c * SA_lag_c + 
+                   RA_mean_c * RA_lag_c + 
+                   TB_mean_c * TB_lag_c + 
+                   PB_lag_c +
+                   (1 | ID), 
+                 data=data_h1_trim)
+
+m4_pb_ris <- brm(PB ~ 1 + 
+                    SA_mean_c * SA_lag_c + 
+                    RA_mean_c * RA_lag_c + 
+                    TB_mean_c * TB_lag_c + 
+                    PB_lag_c + 
+                    (1 + SA_lag_c + RA_lag_c + PB_lag_c + TB_lag_c | ID), 
+                  data=data_h1_trim)
+
+loo(m4_pb_ri, m4_pb_ris)
+
+## MODEL 2a: SA+RA+PB->TB
+m1_tb_ri <- brm(TB ~ 1 + 
+                   SA_mean_c * SA_c + 
+                   RA_mean_c * RA_c + 
+                   PB_mean_c * PB_c + 
+                   (1 | ID), 
+                 data=data_h1)
+
+m1_tb_ris <- brm(TB ~ 1 + 
+                    SA_mean_c * SA_c + 
+                    RA_mean_c * RA_c + 
+                    PB_mean_c * PB_c + 
+                    (1 + SA_c + RA_c + PB_c | ID), 
+                  data=data_h1)
+
+loo(m1_tb_ri, m1_tb_ris)
+
+## MODEL 2b: SA(n-1)+RA(n-1)+PB(n-1)+TB(n-1)->TB
+m4_tb_ri <- brm(TB ~ 1 + 
+                   SA_mean_c * SA_lag_c + 
+                   RA_mean_c * RA_lag_c + 
+                   PB_mean_c * PB_lag_c + 
+                   TB_lag_c +
+                   (1 | ID), 
+                 data=data_h1_trim)
+
+
+m4_tb_ris <- brm(TB ~ 1 + 
+                    SA_mean_c * SA_lag_c + 
+                    RA_mean_c * RA_lag_c + 
+                    PB_mean_c * PB_lag_c + 
+                    TB_lag_c + 
+                    (1 + SA_lag_c + RA_lag_c + PB_lag_c + TB_lag_c | ID), 
+                  data=data_h1_trim)
+
+loo(m4_tb_ri, m4_tb_ris)
