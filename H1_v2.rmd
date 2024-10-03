@@ -18,6 +18,7 @@ library("lavaan")
 library("semPlot")
 library("tidyverse")
 library("optimx")
+library('GPArotation')
 
 # Import and fill NAs
 data <- read.csv("EMA_Daten_Final.csv", header=TRUE)
@@ -166,6 +167,23 @@ data_h1_trim$SA_lag_c <- data_h1_trim$SA_lag - data_h1_trim$SA_mean
 data_h1_trim$RA_lag_c <- data_h1_trim$RA_lag - data_h1_trim$RA_mean
 data_h1_trim$PB_lag_c <- data_h1_trim$PB_lag - data_h1_trim$PB_mean
 data_h1_trim$TB_lag_c <- data_h1_trim$TB_lag - data_h1_trim$TB_mean
+
+# McDonald's omega
+
+sa_col <- c('SA_1','SA_2')
+ra_col <- c('RA_1','RA_2')
+pb_col <- c('PB_1','PB_2')
+tb_col <- c('TB_1','TB_2')
+
+sa <- data_h1[sa_col]
+ra <- data_h1[ra_col]
+pb <- data_h1[pb_col]
+tb <- data_h1[tb_col]
+
+omega(sa,nfactors=1)$omega.tot
+omega(ra,nfactors=1)$omega.tot
+omega(pb,nfactors=1)$omega.tot
+omega(tb,nfactors=1)$omega.tot
 
 # MODEL 0
 ## SA
